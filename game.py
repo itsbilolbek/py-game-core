@@ -1,41 +1,48 @@
 from __future__ import annotations
+from collections.abc import Sequence
 from enum import Enum
 from abc import ABC, abstractmethod
 from typing import Callable, Any
 from random import randint, shuffle, choice
 
-from graph import DirectedGraph
+from graph import UnweightedDirectedMultiGraph
+
+import asyncio
 
 # TODO: Error checking. Unit tests.
 
 
-class Game(ABC):  # TODO: implement "state" functionality
+class Game(ABC):
+    # TODO: implement "state" functionality and event handlers
+    # TODO: Add input streams (wasd, menu, mouse, ...)
+    # TODO: input streams
     class Player(ABC):
         class Action:
             def __init__(self, player: Game.Player, predicate: Callable[[Game.Player], bool], callback: Callable[[Game.Player, Any], None]) -> None:
                 """An action that a player can perform during his turn or out of turn. \n
                 Predicate defines if the player can legally perfomr the action. \n
                 Callback alters the state of the player and/or the game."""
-                self.player: Game.Player = player
+                self.player = player
                 self.predicate = predicate
                 self.callback = callback
 
 
+            @property
+            @abstractmethod
             def is_legal(self) -> bool:
                 return self.predicate(self.player)
             
             
-            def do(self, **kwargs) -> None:
+            async def run(self, **kwargs) -> None:
                 self.callback(self.player, **kwargs)
 
 
         def __init__(self, name: str, game: Game) -> None:
             self.name = name
-            self.left = None  # player to the left
-            self.right = None  # player to the right
             self.game = game
-            self.is_playing = False
             self.is_eliminated = False
+            self.checkbox = None
+            self.radio = None
 
             # choices is what actions a player can make on his turn or out of turn.
             # choices is a dictionary of name: str and Action class instances.
@@ -45,28 +52,183 @@ class Game(ABC):  # TODO: implement "state" functionality
             
             # TODO: come up with a better logic for end of turn, end of phase
             # self.add_choice(name="End of turn", predicate=lambda self: self.game.current_phase == "Play", callback=lambda self: (self.is_playing = False))
-        
+
+
+        # TODO: define getters and setters
 
         @abstractmethod
-        def choose_move(options: list[str]) -> str:
-            return options[0]
-        
+        async def choose_action(self, options: Sequence) -> str:
+            return self.radio(options)
+
 
         def add_choice(self, name: str, predicate: Callable[[Game.Player], bool], callback: Callable[[Game.Player, Any], None]) -> None:
             self.choices[name] = Game.Player.Action(self, predicate, callback)
 
 
-        def play(self) -> None:
+        async def play(self) -> None:
             """Executes actions of a player until his 'end of turn'"""
-
+            # TODO: action menu vs move menu. A player may have lost, but still should have access to menu
             # cointinue playing while it's player's turn
-            while self.is_playing and not self.is_eliminated and not self.game.is_game_over:
-                options = [name for name, action in self.choices.items() if action.is_legal()]
-                action = options[0] if len(options) == 1 else self.choose_move(options)
 
-                # TODO: what to do if there are no options?
+            options = [name for name, action in self.choices.items() if action.is_legal]
+            action = options[0] if len(options) == 1 else await self.choose_action(options)
 
-                self.choices[action].do()
+            # TODO: what to do if there are no options?
+
+            await self.choices[action].run()
+
+        
+        def leave_game(self) -> None:
+            # TODO: on leave event
+            self.game.players.remove(self)
+            pass
+                    
+
+        def __str__(self) -> str:
+            return "Game.Player" + self.name
+        
+
+    class State(Enum):
+        START = 1
+        SETUP = 2
+        LOOP = 3
+
+
+    def __init__(self):
+        self.players: set[Game.Player] = set()
+        self.min_player_count = 2
+        self.max_player_count = 6
+        self._is_game_over = False
+        self.current_state = None
+
+        self.process = [
+            {Game.State.START: self._start_game},
+            {
+                Game.State.SETUP: self.setup_game,
+                Game.State.LOOP: self._game_loop_wrapper
+            },
+            {}
+        ]
+
+    
+    @property
+    def player_count(self) -> int:
+        return len(self.players)
+
+    
+    def add_player(self, name: str) -> Player:
+        player = Game.Player(name=name, game=self)
+        self.players.add(player)
+        return player
+    
+
+    def discard_player(self, player: Player) -> Player:
+        if isinstance(player, Game.Player):
+            self.players.discard(player)        
+
+
+    def add_bot(self, name: str) -> Bot:
+        bot = Bot(name, self)
+        self.players.add(bot)
+        return bot
+    
+
+    def discard_bot(self, bot: Bot) -> Bot:
+        self.discard_player(bot)
+
+    
+    @property
+    @abstractmethod
+    def is_game_over(self) -> bool:
+        """Checks the current state of the game. If the game is over, set self.winners and self.losers"""
+        # Game state implementation goes here
+        return self._is_game_over
+
+    # TODO: implement a state based solution instead
+    # def turn(self) -> None:
+    #     self.current_player.is_playing = True
+    #     for phase in self.turn_phases:
+    #         self.current_phase = phase
+    #         self.current_player.play()
+    #         if self.is_game_over: break
+    #     self.current_player.is_playing = False
+
+    # TODO: create @out_of_turn and @at_the_same_time decorator
+
+    @abstractmethod
+    def setup_game(self) -> None:
+        # Setting up player order
+        shuffle(self.players)
+        self.winners: list[Game.Player] = []
+        self.losers: list[Game.Player] = []
+
+        return Game.State.LOOP
+
+
+    @abstractmethod
+    def game_loop(self) -> None:
+        pass
+    
+
+    async def _game_loop_wrapper(self):
+        while not self.is_game_over:
+            for player in self.players:
+                player.play()
+            return self.game_loop()
+
+
+    def _start_game(self):
+        """Run setup_game, run game loop asyncronously and return a tuple of winners and losers"""
+        self.setup_game()
+
+        asyncio.run(self._game_loop_wrapper())
+
+        return Game.State.SETUP
+
+
+class Bot(Game.Player, ABC):
+    def __init__(self, name: str, game: Game) -> None:
+        super().__init__(name, game)
+    
+    
+    @abstractmethod
+    def choose_action(self, options: list[str]) -> str:
+        # Implement an algorithm that finds the best move
+        best_move = options[0]
+
+        return best_move
+
+
+class ChaoticBot(Bot):
+    """Bot that makes random moves"""
+    def choose_action(self, options: list[str]) -> str:
+        return choice(options)
+
+
+class TurnBasedGame(Game, ABC):
+    class Player(Game.Player, ABC):
+        def __init__(self, name: str, game: TurnBasedGame) -> None:
+            super().__init__(name, game)
+            self.left = None  # player to the left
+            self.right = None  # player to the right
+            self.is_playing = False
+
+            # choices is what actions a player can make on his turn or out of turn.
+            # choices is a dictionary of name: str and Action class instances.
+            # name is returned by the abstract input_handler() method. It can be 
+            # from any source: console, GUI input, http request, ...
+            self.choices: dict[str, TurnBasedGame.Player.Action] = dict()
+            
+            # TODO: come up with a better logic for end of turn, end of phase
+            # self.add_choice(name="End of turn", predicate=lambda self: self.game.current_phase == "Play", callback=lambda self: (self.is_playing = False))
+
+        @abstractmethod
+        def choose_action(self, options: Sequence) -> str:
+            return self.radio(options)
+
+
+        def add_choice(self, name: str, predicate: Callable[[TurnBasedGame.Player], bool], callback: Callable[[TurnBasedGame.Player, Any], None]) -> None:
+            self.choices[name] = TurnBasedGame.Player.Action(self, predicate, callback)
                     
 
         def __str__(self) -> str:
@@ -74,12 +236,12 @@ class Game(ABC):  # TODO: implement "state" functionality
         
     
     class Bot(Player, ABC):
-        def __init__(self, name: str, game: Game) -> None:
+        def __init__(self, name: str, game: TurnBasedGame) -> None:
             super().__init__(name, game)
         
         
         @abstractmethod
-        def choose_move(self, options: list[str]) -> str:
+        def choose_action(self, options: list[str]) -> str:
             # Implement an algorithm that finds the best move
             best_move = options[0]
 
@@ -92,17 +254,17 @@ class Game(ABC):  # TODO: implement "state" functionality
 
 
     def __init__(self):
-        self.turn_phases: list[Game.TurnPhase] = [Game.TurnPhase.DRAW, Game.TurnPhase.PLAY]
-        self.current_phase: Game.TurnPhase = ""
-        self.players: list[Game.Player] = []
+        self.turn_phases: list[TurnBasedGame.TurnPhase] = [TurnBasedGame.TurnPhase.DRAW, TurnBasedGame.TurnPhase.PLAY]
+        self.current_phase: TurnBasedGame.TurnPhase = ""
+        self.players: list[TurnBasedGame.Player] = []
         self.min_player_count = 2
         self.max_player_count = 6
         self.clockwise = True
         self._is_game_over = False
 
     
-    def add_player(self, name: str) -> Game.Player:
-        player = Game.Player(name=name, game=self)
+    def add_player(self, name: str) -> TurnBasedGame.Player:
+        player = TurnBasedGame.Player(name=name, game=self)
         self.players.append(player)
         return player
 
@@ -119,7 +281,7 @@ class Game(ABC):  # TODO: implement "state" functionality
         return self._is_game_over
 
 
-    def next_player(self) -> Game.Player:
+    def next_player(self) -> TurnBasedGame.Player:
         return self.current_player.left if self.clockwise else self.current_player.right
 
 
@@ -137,8 +299,8 @@ class Game(ABC):  # TODO: implement "state" functionality
     def setup_game(self) -> None:
         # Setting up player order
         shuffle(self.players)
-        self.winners: list[Game.Player] = []
-        self.losers: list[Game.Player] = []
+        self.winners: list[TurnBasedGame.Player] = []
+        self.losers: list[TurnBasedGame.Player] = []
 
         # setting left and right players
         self.players.insert(0, self.players[-1])
@@ -149,19 +311,15 @@ class Game(ABC):  # TODO: implement "state" functionality
         
         self.players.pop()
         self.players.pop(0)
-        self.current_player: Game.Player = self.players[0]
+        self.current_player: TurnBasedGame.Player = self.players[0]
 
 
-    def start_game(self) -> tuple[list[Game.Player], list[Game.Player]]:
-        self.setup_game()
-
-        # returns a tuple of list of winner players and list of lost players
+    @abstractmethod
+    def game_loop(self) -> None:
         # TODO: add rounds. One round is when all players have played once
-        while not self.is_game_over:
-            self.turn(self.current_player)
-            self.current_player = self.next_player()
-        
-        return self.winners, self.losers
+        self.turn(self.current_player)
+        self.current_player = self.next_player()
+        return super().game_loop()
 
 
 class Dice():
@@ -297,8 +455,8 @@ DECK_36 = ACES + SIXES + SEVENS + EIGHTS + NINES + TENS + JACKS + QUEENS + KINGS
 DECK_52 = ACES + TWOS + THREES + FOURS + FIVES + SIXES + SEVENS + EIGHTS + NINES + TENS + JACKS + QUEENS + KINGS
 
 
-class CardGame(Game, ABC):
-    class Player(Game.Player, ABC):
+class CardGame(TurnBasedGame, ABC):
+    class Player(TurnBasedGame.Player, ABC):
         def __init__(self, name: str, game: CardGame) -> None:
             super().__init__(name, game)
             self._hand: list[Card] = []
@@ -347,7 +505,7 @@ class CardGame(Game, ABC):
         
 
         def discard_card(self, pile: list[Card]) -> None:
-            card = self.choose_move([card.name for card in self.hand])
+            card = self.choose_action([card.name for card in self.hand])
             self.hand.remove(card)
             pile.append(card)
         
@@ -374,9 +532,9 @@ class CardGame(Game, ABC):
         self.hand_limit: int = 4
 
 
-class BoardGame(Game, ABC):
+class BoardGame(TurnBasedGame, ABC):
     def __init__(self) -> None:
         super().__init__()
         self.dice = Dice()
-        self.board: DirectedGraph = None
+        self.board: UnweightedDirectedMultiGraph = None
 

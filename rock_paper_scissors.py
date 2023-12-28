@@ -1,10 +1,10 @@
-from game import Game
+from game import TurnBasedGame
 
 
-class RockPaperScissors(Game):
-    class Player(Game.Player):
-        def choose_move(options: list[str]) -> str:
-            return super().choose_move()
+class RockPaperScissors(TurnBasedGame):
+    class Player(TurnBasedGame.Player):
+        def choose_action(options: list[str]) -> str:
+            return super().choose_action()
 
 
     def setup_game(self):
