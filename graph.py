@@ -1,8 +1,3 @@
-from __future__ import annotations
-from typing import TypeVar, Generic
-from abc import ABC, abstractmethod
-
-
 class WeightedDirectedMultiGraph:
     class Node:
         def __init__(self, value) -> None:
@@ -26,6 +21,14 @@ class WeightedDirectedMultiGraph:
         self.graph.pop(node)
     
 
+    def find_node(self, node: Node) -> bool:
+        for i in self.graph:
+            if i is node:
+                return True
+        
+        return False
+    
+
     def add_edge(self, node1: Node, node2: Node, weight: int) -> None:
         self.add_node(node1)
         self.add_node(node2)
@@ -41,6 +44,47 @@ class WeightedDirectedMultiGraph:
     def remove_edge(self, node1: Node, node2: Node, weight: int) -> None:
         self.graph[node1][node2].remove(weight)
         self.graph[node2][node1].remove(-weight)
+
+    
+    def find_edge(self, node1: Node, node2: Node, weight: int) -> bool:
+        if node2 in self.graph[node1]:
+            return weight in self.graph[node1][node2]
+    
+        return False
+
+
+    def dfs(self, func, node: Node = None) -> None:
+        if len(self.graph) == 0: return
+
+        visited = set()
+        if node is None:
+            node = self.graph.keys()[0]
+        stack = [node]
+
+        while len(stack):
+            i = stack.pop()
+            if i not in visited:
+                visited.add(i)
+                stack.extend(self.graph[i].keys() - visited)
+                if func(i): return
+
+
+    def bfs(self, func, node: Node = None) -> None:
+        if len(self.graph) == 0: return
+
+        visited = set()
+        if node is None:
+            node = self.graph.keys()[0]
+        queue = [node]
+
+        while len(queue):
+            i = queue.pop(0)
+            if i not in visited:
+                visited.add(i)
+                queue.extend(self.graph[i].keys() - visited)
+                if func(i): return
+
+    # TODO: implement Djikstra, A* and other algorithms
 
 
 class UnweightedDirectedMultiGraph(WeightedDirectedMultiGraph):
@@ -80,6 +124,23 @@ class WeightedDirectedSimpleGraph(WeightedDirectedMultiGraph):
         super().add_edge(node1, node2, weight)
 
 
+    def has_cycle(self) -> bool:
+        if len(self.graph) == 0: return False
+
+        visited = set()
+        stack = [self.graph.keys()[0]]
+
+        while len(stack):
+            node = stack.pop()
+
+            if node in visited: return True
+
+            stack.extend(self.graph[node].keys() - {node})
+            visited.add(node)
+            
+        return False
+
+
 class WeightedUndirectedSimpleGraph(WeightedDirectedSimpleGraph, WeightedUndirectedMultiGraph):
     pass
 
@@ -92,17 +153,17 @@ class UnweightedUndirectedSimpleGraph(WeightedDirectedSimpleGraph, UnweightedUnd
     pass
 
 
-class SimpleGraph(UnweightedDirectedSimpleGraph):
+class MultiGraph(UnweightedDirectedMultiGraph):
     """Unweighted directed simple graph"""
 
 
-class UndirectedGraph(UnweightedUndirectedMultiGraph):
+class UndirectedGraph(UnweightedUndirectedSimpleGraph):
     """Unweighted undirected multi graph"""
 
 
-class WeightedGraph(WeightedDirectedMultiGraph):
+class WeightedGraph(WeightedDirectedSimpleGraph):
     """Weighted directed multigraph"""
 
 
-class Graph(UnweightedDirectedMultiGraph):
+class Graph(UnweightedDirectedSimpleGraph):
     """Unweighted directed multi graph"""
