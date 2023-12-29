@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 class WeightedDirectedMultiGraph:
     class Node:
         def __init__(self, value) -> None:
@@ -8,25 +10,61 @@ class WeightedDirectedMultiGraph:
         self.graph: dict[self.Node, dict[self.Node, list[int]]] = {}
 
     
-    def add_node(self, node: Node) -> None:
+    def add_node(self, value) -> Node:
+        node = self.Node(value)
+
         if node not in self.graph:
             self.graph[node] = {}
+        
+        return node
     
 
     def remove_node(self, node: Node) -> None:
-        for other, edges in self.graph[node].items():
-            for weight in edges:
-                self.remove_edge(node, other, weight)
+        for edge, weights in self.graph[node].items():
+            for weight in weights:
+                self.remove_edge(node, edge, weight)
         
         self.graph.pop(node)
     
 
-    def find_node(self, node: Node) -> bool:
+    def __delitem__(self, node: Node) -> None:
+        self.remove_node(node)
+    
+
+    @property
+    def nodes(self) -> set[Node]:
+        return self.graph.keys()
+    
+
+    def __iter__(self):
+        return self.graph.__iter__()
+    
+
+    def __next__(self):
+        return self.graph.__next__()
+    
+
+    def __contains__(self, node: Node) -> bool:
         for i in self.graph:
             if i is node:
                 return True
         
         return False
+    
+
+    def __len__(self) -> int:
+        return len(self.graph)
+    
+
+    def __add__(self, other: Graph) -> Graph:
+        new_graph = Graph()
+        for node, edges in self.graph:
+            new_graph.graph[node] = edges
+        
+        for node, edges in other.graph:
+            new_graph.graph[node] = edges
+        
+        return new_graph
     
 
     def add_edge(self, node1: Node, node2: Node, weight: int) -> None:
@@ -53,7 +91,23 @@ class WeightedDirectedMultiGraph:
         return False
 
 
-    def dfs(self, func, node: Node = None) -> Node:
+    def get_edges(self, node: Node) -> dict[Node, list[int]]:
+        return self.graph[node]
+    
+    
+    def __getitem__(self, node: Node) -> dict[Node, list[int]]:
+        return self.get_edges(node)
+    
+
+    def get_in_edges(self, node: Node) -> dict[Node, list[int]]:
+        return {edge: weight for edge, weight in self.graph[node].items() if weight < 0}
+    
+
+    def get_out_edges(self, node: Node) -> dict[Node, list[int]]:
+        return {edge: weight for edge, weight in self.graph[node].items() if weight > 0}
+
+
+    def dfs(self, func, node: Node = None) -> Node:  # TODO: add documentation
         if len(self.graph) == 0: return
 
         visited = set()
@@ -122,6 +176,7 @@ class UnweightedUndirectedMultiGraph(UnweightedDirectedMultiGraph, WeightedUndir
 
 class WeightedDirectedSimpleGraph(WeightedDirectedMultiGraph):
     def add_edge(self, node1: WeightedDirectedMultiGraph.Node, node2: WeightedDirectedMultiGraph.Node, weight: int) -> None:
+        if node1 is node2: return
         self.graph[node1][node2] = []
         super().add_edge(node1, node2, weight)
 
