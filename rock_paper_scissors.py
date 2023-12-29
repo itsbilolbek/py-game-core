@@ -1,4 +1,4 @@
-from game import TurnBasedGame
+from game.game import TurnBasedGame
 
 
 class RockPaperScissors(TurnBasedGame):
@@ -7,8 +7,8 @@ class RockPaperScissors(TurnBasedGame):
             return super().choose_action()
 
 
-    def setup_game(self):
-        return super().setup_game()
+    def setup(self):
+        return super().setup()
     
 
     @property

@@ -215,12 +215,12 @@ class MultiGraph(UnweightedDirectedMultiGraph):
 
 
 class UndirectedGraph(UnweightedUndirectedSimpleGraph):
-    """Unweighted undirected multi graph"""
+    """Unweighted undirected simple graph"""
 
 
 class WeightedGraph(WeightedDirectedSimpleGraph):
-    """Weighted directed multigraph"""
+    """Weighted directed simple graph"""
 
 
 class Graph(UnweightedDirectedSimpleGraph):
-    """Unweighted directed multi graph"""
+    """Unweighted directed simple graph"""

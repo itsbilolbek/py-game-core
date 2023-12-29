@@ -1,11 +1,11 @@
 from typing import Any, Callable
-from game import *
+from game.game import *
 from random import shuffle
 
-from game import Player
+from game import *
 
 
-class DurakPlayer(Player):
+class DurakPlayer(Game.Player):
     def next_action(self) -> Callable[[Player], Any]:
         action = input()
         match (action):

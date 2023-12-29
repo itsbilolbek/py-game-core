@@ -4,18 +4,17 @@ from enum import Enum
 from abc import ABC, abstractmethod
 from typing import Callable, Any
 from random import randint, shuffle, choice
+from program import Program
 
-from graph import UnweightedDirectedMultiGraph
+from graph import Graph
 
 import asyncio
 
 # TODO: Error checking. Unit tests.
+# TODO: Fix type hinting
 
 
-class Game(ABC):
-    # TODO: implement "state" functionality and event handlers
-    # TODO: Add input streams (wasd, menu, mouse, ...)
-    # TODO: input streams
+class Game(Program, ABC):
     class Player(ABC):
         class Action:
             def __init__(self, player: Game.Player, predicate: Callable[[Game.Player], bool], callback: Callable[[Game.Player, Any], None]) -> None:
@@ -28,7 +27,6 @@ class Game(ABC):
 
 
             @property
-            @abstractmethod
             def is_legal(self) -> bool:
                 return self.predicate(self.player)
             
@@ -86,43 +84,42 @@ class Game(ABC):
 
         def __str__(self) -> str:
             return "Game.Player" + self.name
-        
-
-    class State(Enum):
-        START = 1
-        SETUP = 2
-        LOOP = 3
-
+            
 
     def __init__(self):
         self.players: set[Game.Player] = set()
         self.min_player_count = 2
         self.max_player_count = 6
         self._is_game_over = False
-        self.current_state = None
+        self.game_process = Graph()
+
+        self.current_state = self.game_process.add_node(Game.setup)
+        
 
         self.process = [
-            {Game.State.START: self._start_game},
+            {Game.State.START: self._start_program},
             {
-                Game.State.SETUP: self.setup_game,
-                Game.State.LOOP: self._game_loop_wrapper
+                Game.State.SETUP: self.setup,
+                Game.State.LOOP: self._loop_wrapper
             },
             {}
         ]
 
+        self.current_state = None
+
     
     @property
-    def player_count(self) -> int:
+    def users_count(self) -> int:
         return len(self.players)
 
     
-    def add_player(self, name: str) -> Player:
+    def add_user(self, name: str) -> Player:
         player = Game.Player(name=name, game=self)
         self.players.add(player)
         return player
     
 
-    def discard_player(self, player: Player) -> Player:
+    def discard_user(self, player: Player) -> Player:
         if isinstance(player, Game.Player):
             self.players.discard(player)        
 
@@ -134,7 +131,7 @@ class Game(ABC):
     
 
     def discard_bot(self, bot: Bot) -> Bot:
-        self.discard_player(bot)
+        self.discard_user(bot)
 
     
     @property
@@ -144,19 +141,9 @@ class Game(ABC):
         # Game state implementation goes here
         return self._is_game_over
 
-    # TODO: implement a state based solution instead
-    # def turn(self) -> None:
-    #     self.current_player.is_playing = True
-    #     for phase in self.turn_phases:
-    #         self.current_phase = phase
-    #         self.current_player.play()
-    #         if self.is_game_over: break
-    #     self.current_player.is_playing = False
-
-    # TODO: create @out_of_turn and @at_the_same_time decorator
 
     @abstractmethod
-    def setup_game(self) -> None:
+    def setup(self) -> None:
         # Setting up player order
         shuffle(self.players)
         self.winners: list[Game.Player] = []
@@ -166,22 +153,22 @@ class Game(ABC):
 
 
     @abstractmethod
-    def game_loop(self) -> None:
+    def loop(self) -> None:
         pass
     
 
-    async def _game_loop_wrapper(self):
+    async def _loop_wrapper(self):
         while not self.is_game_over:
             for player in self.players:
                 player.play()
-            return self.game_loop()
+            return self.loop()
 
 
-    def _start_game(self):
+    def _start_program(self):
         """Run setup_game, run game loop asyncronously and return a tuple of winners and losers"""
-        self.setup_game()
+        self.setup()
 
-        asyncio.run(self._game_loop_wrapper())
+        asyncio.run(self._loop_wrapper())
 
         return Game.State.SETUP
 
@@ -234,11 +221,6 @@ class TurnBasedGame(Game, ABC):
         def __str__(self) -> str:
             return "Game.Player" + self.name
         
-    
-    class Bot(Player, ABC):
-        def __init__(self, name: str, game: TurnBasedGame) -> None:
-            super().__init__(name, game)
-        
         
         @abstractmethod
         def choose_action(self, options: list[str]) -> str:
@@ -251,6 +233,18 @@ class TurnBasedGame(Game, ABC):
     class TurnPhase(Enum):
         DRAW = 1
         PLAY = 2
+    
+
+    # TODO: implement a state based solution instead
+    # def turn(self) -> None:
+    #     self.current_player.is_playing = True
+    #     for phase in self.turn_phases:
+    #         self.current_phase = phase
+    #         self.current_player.play()
+    #         if self.is_game_over: break
+    #     self.current_player.is_playing = False
+
+    # TODO: create @out_of_turn and @at_the_same_time decorator
 
 
     def __init__(self):
@@ -261,16 +255,6 @@ class TurnBasedGame(Game, ABC):
         self.max_player_count = 6
         self.clockwise = True
         self._is_game_over = False
-
-    
-    def add_player(self, name: str) -> TurnBasedGame.Player:
-        player = TurnBasedGame.Player(name=name, game=self)
-        self.players.append(player)
-        return player
-
-
-    def add_bot(self, name: str):
-        pass
 
     
     @property
@@ -296,7 +280,7 @@ class TurnBasedGame(Game, ABC):
     # TODO: create @out_of_turn and @at_the_same_time decorator
 
     @abstractmethod
-    def setup_game(self) -> None:
+    def setup(self) -> None:
         # Setting up player order
         shuffle(self.players)
         self.winners: list[TurnBasedGame.Player] = []
@@ -315,11 +299,11 @@ class TurnBasedGame(Game, ABC):
 
 
     @abstractmethod
-    def game_loop(self) -> None:
+    def loop(self) -> None:
         # TODO: add rounds. One round is when all players have played once
         self.turn(self.current_player)
         self.current_player = self.next_player()
-        return super().game_loop()
+        return super().loop()
 
 
 class Dice():
