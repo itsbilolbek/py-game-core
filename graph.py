@@ -53,7 +53,7 @@ class WeightedDirectedMultiGraph:
         return False
 
 
-    def dfs(self, func, node: Node = None) -> None:
+    def dfs(self, func, node: Node = None) -> Node:
         if len(self.graph) == 0: return
 
         visited = set()
@@ -64,12 +64,13 @@ class WeightedDirectedMultiGraph:
         while len(stack):
             i = stack.pop()
             if i not in visited:
+                res = func(i)
+                if res: return i
                 visited.add(i)
                 stack.extend(self.graph[i].keys() - visited)
-                if func(i): return
 
 
-    def bfs(self, func, node: Node = None) -> None:
+    def bfs(self, func, node: Node = None) -> Node:
         if len(self.graph) == 0: return
 
         visited = set()
@@ -80,9 +81,10 @@ class WeightedDirectedMultiGraph:
         while len(queue):
             i = queue.pop(0)
             if i not in visited:
+                res = func(i)
+                if res: return i
                 visited.add(i)
                 queue.extend(self.graph[i].keys() - visited)
-                if func(i): return
 
     # TODO: implement Djikstra, A* and other algorithms
 
