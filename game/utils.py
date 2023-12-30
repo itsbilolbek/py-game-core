@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from utils import DirectedGraph
 from typing import Callable
 
 
@@ -50,13 +49,3 @@ class StandardInput:
     def in_decimal() -> int:
         pass
 
-
-class Process:  # TODO
-    class State:
-        def __init__(self) -> None:
-            pass
-
-    
-    def __init__(self) -> None:
-        self.entry = None
-        self.states = DirectedGraph()
